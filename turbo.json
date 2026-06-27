@@ -1,0 +1,25 @@
+{
+  "$schema": "https://v2-8-13.turborepo.dev/schema.json",
+  "globalEnv": ["CI", "DEVCODE_DISABLE_SHARE"],
+  "globalPassThroughEnv": ["CI", "DEVCODE_DISABLE_SHARE"],
+  "tasks": {
+    "typecheck": {},
+    "build": {
+      "dependsOn": [],
+      "outputs": ["dist/**"]
+    },
+    "devcode#test": {
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "passThroughEnv": ["*"]
+    },
+    "@devcode-ai/app#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "@devcode-ai/ui#test": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    }
+  }
+}

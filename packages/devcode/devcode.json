@@ -1,0 +1,4 @@
+{
+  "$schema": "https://devcode.ai/config.json",
+  "lsp": true
+}
