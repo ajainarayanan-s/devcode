@@ -33,16 +33,23 @@ export function ShimmerText(props: ShimmerTextProps) {
   const heading = createMemo(() => lines()[0] ?? "")
   const childrenLines = createMemo(() => lines().slice(1))
 
-  const isHovered = createMemo(() => {
-    const b = baseColor()
-    return b.r !== theme.textMuted.r || b.g !== theme.textMuted.g || b.b !== theme.textMuted.b
+  // Capture the initial base color when the component mounts.
+  const [initialColor] = createSignal(baseColor())
+
+  // If the color changes from its initial baseline, it means a parent component
+  // is applying a dynamic state (like a hover effect or an error state).
+  // We pause the shimmer animation so the text can cleanly display this new state.
+  const isStateChanged = createMemo(() => {
+    const current = baseColor()
+    const initial = initialColor()
+    return current.r !== initial.r || current.g !== initial.g || current.b !== initial.b
   })
 
   const span = () => heading().length + bandWidth() * 2
   const [phase, setPhase] = createSignal(0)
 
   createEffect(() => {
-    if (isHovered()) return
+    if (isStateChanged()) return
     const totalSpeed = speed()
     const currentSpan = span()
     if (currentSpan <= 0) return
@@ -66,7 +73,7 @@ export function ShimmerText(props: ShimmerTextProps) {
   // adjacent characters that share a (quantized) color into one <text>
   // so we're not emitting a color escape code per character.
   const chunks = createMemo(() => {
-    if (isHovered()) return []
+    if (isStateChanged()) return []
     const center = phase() - bandWidth()
     const t = heading()
     const bColor = baseColor()
@@ -97,7 +104,7 @@ export function ShimmerText(props: ShimmerTextProps) {
   return (
     <box flexDirection="column">
       <Show
-        when={!isHovered()}
+        when={!isStateChanged()}
         fallback={<text fg={baseColor()}>{heading()}</text>}
       >
         <box flexDirection="row">
