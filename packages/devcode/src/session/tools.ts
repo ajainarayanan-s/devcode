@@ -120,6 +120,58 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
     const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
     const transformed = ProviderTransform.schema(input.model, { ...schema, properties: schema.properties ?? {} })
+
+    if (!transformed.properties) transformed.properties = {}
+    transformed.properties.toolSummary = {
+      type: "string",
+      description: `Generate a natural progress summary that describes the assistant's current objective.
+
+The summary should read like Claude Code or Cursor, as if the assistant is thinking out loud.
+
+Requirements:
+- Describe the intent, not the tool.
+- Use natural language.
+- Prefer present tense.
+- Sound proactive and conversational.
+- Keep it concise (5–14 words).
+- Avoid filenames unless they're important.
+- Avoid generic phrases like "Using tool", "Calling function", "Reading file", or "Editing file".
+
+Good examples:
+- Let me explore the project's core files.
+- Let me understand how this feature works.
+- Deploying multiple agents to tackle this in parallel.
+- Investigating the collision system.
+- Reviewing the rendering pipeline.
+- Searching for the source of the issue.
+- Gathering context before making changes.
+- Validating the latest implementation.
+- Coordinating parallel fixes across the project.
+- Applying the final refinements.`,
+    }
+    transformed.properties.toolAction = {
+      type: "string",
+      description: `Generate a concise action label for this tool call, used as a group title prefix.
+
+Requirements:
+- Use 1–3 words maximum.
+- Use imperative mood (e.g., "Reading", "Editing", "Delegating").
+- Describe the action, not the tool name.
+- Keep it professional and direct.
+
+Good examples:
+- Reading files
+- Editing source
+- Delegating agents
+- Searching code
+- Running commands
+- Writing output
+- Gathering context
+- Deploying fixes`,
+    }
+    if (!transformed.required) transformed.required = []
+    transformed.required.push("toolSummary", "toolAction")
+
     item.inputSchema = jsonSchema(transformed)
     item.execute = (args, opts) =>
       run.promise(

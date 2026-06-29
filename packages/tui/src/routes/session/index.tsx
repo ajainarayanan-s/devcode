@@ -93,6 +93,8 @@ const GO_UPSELL_PROVIDERS = new Set(["devcode", "devcode-go"])
 
 export const alwaysSeparate = new WeakSet<BoxRenderable>()
 
+export const ToolGroupContext = createContext(false)
+
 type RetryAction = Extract<SessionStatus, { type: "retry" }>["action"]
 
 function goUpsellKeys(action: RetryAction) {
@@ -1482,15 +1484,47 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
 
+  const groupedParts = createMemo(() => {
+    const result: (Part | { type: "tool_group"; parts: ToolPart[] })[] = []
+    let currentToolGroup: ToolPart[] = []
+
+    for (const part of props.parts) {
+      if (part.type === "tool") {
+        currentToolGroup.push(part)
+      } else {
+        if (currentToolGroup.length > 0) {
+          if (currentToolGroup.length === 1) {
+            result.push(currentToolGroup[0])
+          } else {
+            result.push({ type: "tool_group", parts: currentToolGroup })
+          }
+          currentToolGroup = []
+        }
+        result.push(part)
+      }
+    }
+    if (currentToolGroup.length > 0) {
+      if (currentToolGroup.length === 1) {
+        result.push(currentToolGroup[0])
+      } else {
+        result.push({ type: "tool_group", parts: currentToolGroup })
+      }
+    }
+    return result
+  })
+
   return (
     <>
-      <For each={props.parts}>
+      <For each={groupedParts()}>
         {(part, index) => {
+          if (part.type === "tool_group") {
+            return <ToolGroup parts={part.parts} message={props.message} allParts={props.parts} />
+          }
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
           return (
             <Show when={component()}>
               <Dynamic
-                last={index() === props.parts.length - 1}
+                last={index() === groupedParts().length - 1}
                 component={component()}
                 part={part as any}
                 message={props.message}
@@ -2324,6 +2358,153 @@ export function formatCompletedSubagentDetail(toolcalls: number, duration: strin
   return `${formatSubagentToolcalls(toolcalls)} · ${duration}`
 }
 
+function precedingThought(allParts?: Part[], parts?: ToolPart[]): string | null {
+  if (!allParts || !parts || parts.length === 0) return null
+  const firstTool = parts[0]
+  const idx = allParts.findIndex((p) => p === firstTool)
+  if (idx > 0) {
+    const prev = allParts[idx - 1]
+    if (prev.type === "reasoning" || prev.type === "text") {
+      return (prev as any).text as string
+    }
+  }
+  return null
+}
+
+function userMessageTitle(message?: AssistantMessage, sync?: ReturnType<typeof useSync>): string | null {
+  if (!message || !sync) return null
+  const messages = sync.data.message[message.sessionID] ?? []
+  const userMsg = messages.find((m) => m.role === "user" && m.id === message.parentID)
+  if (userMsg) {
+    if (typeof userMsg.summary === "object" && userMsg.summary?.title) {
+      return userMsg.summary.title
+    }
+    const parts = sync.data.part[userMsg.id] ?? []
+    const textParts = parts.filter((p) => p.type === "text")
+    if (textParts.length > 0) return textParts.map((p) => (p as any).text).join("\n")
+  }
+  return null
+}
+
+function smartPluralize(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? ""
+  return `${items[0]} and ${items.length - 1} other${items.length - 1 > 1 ? "s" : ""}`
+}
+
+function ToolGroup(props: { parts: ToolPart[]; message?: AssistantMessage; allParts?: Part[] }) {
+  const { theme } = useTheme()
+  const sync = useSync()
+
+  const isRunning = createMemo(() => {
+    return props.parts.some((p) => {
+      const status = p.state.status
+      return status === "running" || (p.metadata?.background === true && status !== "completed" && status !== "error")
+    })
+  })
+
+  const isTaskGroup = createMemo(() => {
+    return props.parts.every((p) => p.tool === "task")
+  })
+
+  const prefix = createMemo(() => {
+    const actions = props.parts
+      .map((p) => (typeof p.state.input?.toolAction === "string" ? p.state.input.toolAction : null))
+      .filter(Boolean) as string[]
+
+    if (actions.length > 0) {
+      const unique = [...new Set(actions)]
+      if (unique.length === 1) return unique[0]
+      return smartPluralize(unique)
+    }
+
+    const toolNames = [...new Set(props.parts.map((p) => p.tool))]
+    if (toolNames.length === 1) {
+      switch (toolNames[0]) {
+        case "task": {
+          const types = [...new Set(props.parts.map((p) => stringValue(p.state.input?.subagent_type) ?? "General"))]
+          if (types.length === 1) return `${Locale.titlecase(types[0])} Agents`
+          return "Multiple Agents"
+        }
+        case "read_file":
+          return "Reading Files"
+        case "write_file":
+          return "Writing Files"
+        case "run_command":
+          return "Running Commands"
+        default:
+          return "Executing Tools"
+      }
+    }
+    return "Executing Tools"
+  })
+
+  const description = createMemo(() => {
+    const explicitSummaries = props.parts
+      .map((p) => stringValue(p.state.input?.toolSummary))
+      .filter(Boolean) as string[]
+
+    if (explicitSummaries.length > 0) {
+      return smartPluralize(explicitSummaries)
+    }
+
+    const fallbacks = props.parts
+      .map((p) => {
+        if (p.tool === "task") return stringValue(p.state.input?.description)
+        if (p.tool === "read_file" || p.tool === "view_file") return stringValue(p.state.input?.path)
+        if (p.tool === "run_command") return stringValue(p.state.input?.command)
+        if (p.tool === "grep_search") return stringValue(p.state.input?.pattern)
+        if (p.tool === "search_web") return stringValue(p.state.input?.query)
+        return null
+      })
+      .filter(Boolean) as string[]
+
+    if (fallbacks.length > 0) {
+      return smartPluralize(fallbacks)
+    }
+
+    const userTitle = userMessageTitle(props.message, sync)
+    if (userTitle) {
+      const firstSentence = userTitle.split(/[.\n]/)[0].trim()
+      if (firstSentence) return Locale.truncate(firstSentence, 80)
+    }
+
+    const thought = precedingThought(props.allParts, props.parts)
+    if (thought) {
+      const cleanThought = thought.replace("[REDACTED]", "").trim()
+      const summary = reasoningSummary(cleanThought)
+      if (summary.title) return Locale.truncate(summary.title, 60)
+      const firstSentence = summary.body.split(/[.\n]/)[0].trim()
+      if (firstSentence) return Locale.truncate(firstSentence, 60)
+    }
+
+    return "Executing multiple tools"
+  })
+
+  return (
+    <box flexDirection="column">
+      <InlineToolRow
+        icon={isRunning() ? "│" : "✓"}
+        spinner={isRunning()}
+        color={theme.secondary}
+        pending={description()}
+        complete={!isRunning()}
+        separate={true}
+      >
+        {`${prefix()} — ${Locale.truncate(description(), 80)}`}
+      </InlineToolRow>
+      <box flexDirection="column" paddingLeft={2} marginTop={isTaskGroup() ? 0 : 1}>
+        <ToolGroupContext.Provider value={true}>
+          <For each={props.parts}>
+            {(part, index) => (
+              <ToolPart part={part} message={props.message!} last={index() === props.parts.length - 1} />
+            )}
+          </For>
+        </ToolGroupContext.Provider>
+      </box>
+    </box>
+  )
+}
+
 function Edit(props: ToolProps) {
   const ctx = use()
   const { theme, syntax } = useTheme()
@@ -2550,8 +2731,10 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
 }
 
 function input(input: Record<string, unknown>, omit?: string[]): string {
+  const alwaysOmit = ["toolSummary", "toolAction"]
+  const omitSet = new Set([...alwaysOmit, ...(omit ?? [])])
   const primitives = Object.entries(input).filter(([key, value]) => {
-    if (omit?.includes(key)) return false
+    if (omitSet.has(key)) return false
     return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
   })
   if (primitives.length === 0) return ""
