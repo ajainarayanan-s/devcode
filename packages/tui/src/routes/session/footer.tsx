@@ -5,13 +5,13 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/use-connected"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
-import { useKV } from "../../context/kv"
+import { truthy } from "@devcode/core/flag/flag"
 
 export function Footer() {
   const { theme } = useTheme()
   const sync = useSync()
   const route = useRoute()
-  const kv = useKV()
+
   const mcp = createMemo(() => Object.values(sync.data.mcp).filter((x) => x.status === "connected").length)
   const mcpError = createMemo(() => Object.values(sync.data.mcp).some((x) => x.status === "failed"))
   const lsp = createMemo(() => Object.keys(sync.data.lsp))
@@ -21,7 +21,7 @@ export function Footer() {
   })
   const directory = useDirectory()
   const connected = useConnected()
-  const [bgSubagentsEnabled] = kv.signal("experimental_background_subagents", false)
+  const experimentalEnabled = () => truthy("DEVCODE_EXPERIMENTAL")
 
   const [store, setStore] = createStore({
     welcome: false,
@@ -72,9 +72,9 @@ export function Footer() {
             <text fg={theme.text}>
               <span style={{ fg: lsp().length > 0 ? theme.success : theme.textMuted }}>•</span> {lsp().length} LSP
             </text>
-            <Show when={bgSubagentsEnabled()}>
+            <Show when={experimentalEnabled()}>
               <text fg={theme.text}>
-                <span style={{ fg: theme.accent }}>⚡</span> BG
+                <span style={{ fg: theme.accent }}>⚡</span>
               </text>
             </Show>
             <Show when={mcp()}>

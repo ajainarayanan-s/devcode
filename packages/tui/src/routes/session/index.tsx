@@ -2387,8 +2387,11 @@ function userMessageTitle(message?: AssistantMessage, sync?: ReturnType<typeof u
 }
 
 function smartPluralize(items: string[]): string {
-  if (items.length <= 1) return items[0] ?? ""
-  return `${items[0]} and ${items.length - 1} other${items.length - 1 > 1 ? "s" : ""}`
+  if (items.length === 0) return ""
+  if (items.length === 1) return items[0]
+  if (items.length === 2) return `${items[0]} and ${items[1]}`
+  if (items.length === 3) return `${items[0]}, ${items[1]}, and ${items[2]}`
+  return `${items[0]}, ${items[1]}, and ${items.length - 2} others`
 }
 
 function ToolGroup(props: { parts: ToolPart[]; message?: AssistantMessage; allParts?: Part[] }) {
@@ -2414,7 +2417,7 @@ function ToolGroup(props: { parts: ToolPart[]; message?: AssistantMessage; allPa
     if (actions.length > 0) {
       const unique = [...new Set(actions)]
       if (unique.length === 1) return unique[0]
-      return smartPluralize(unique)
+      return "Coordinating tasks"
     }
 
     const toolNames = [...new Set(props.parts.map((p) => p.tool))]
@@ -2422,20 +2425,20 @@ function ToolGroup(props: { parts: ToolPart[]; message?: AssistantMessage; allPa
       switch (toolNames[0]) {
         case "task": {
           const types = [...new Set(props.parts.map((p) => stringValue(p.state.input?.subagent_type) ?? "General"))]
-          if (types.length === 1) return `${Locale.titlecase(types[0])} Agents`
-          return "Multiple Agents"
+          if (types.length === 1) return `${Locale.titlecase(types[0])} agents`
+          return "Coordinating agents"
         }
         case "read_file":
-          return "Reading Files"
+          return "Reading files"
         case "write_file":
-          return "Writing Files"
+          return "Writing files"
         case "run_command":
-          return "Running Commands"
+          return "Running commands"
         default:
-          return "Executing Tools"
+          return "Executing tools"
       }
     }
-    return "Executing Tools"
+    return "Coordinating tasks"
   })
 
   const description = createMemo(() => {
@@ -2477,7 +2480,7 @@ function ToolGroup(props: { parts: ToolPart[]; message?: AssistantMessage; allPa
       if (firstSentence) return Locale.truncate(firstSentence, 60)
     }
 
-    return "Executing multiple tools"
+    return "Running concurrent tasks"
   })
 
   return (

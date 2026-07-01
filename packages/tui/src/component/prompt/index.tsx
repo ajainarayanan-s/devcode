@@ -14,7 +14,7 @@ import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
-import { Flag } from "@devcode/core/flag/flag"
+import { Flag, truthy } from "@devcode/core/flag/flag"
 import { tint, useTheme } from "../../context/theme"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -167,7 +167,7 @@ export function Prompt(props: PromptProps) {
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
   const kv = useKV()
-  const [bgSubagentsEnabled] = kv.signal("experimental_background_subagents", false)
+  const bgSubagentsEnabled = () => truthy("DEVCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS")
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
