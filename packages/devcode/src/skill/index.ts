@@ -32,7 +32,7 @@ const SKILL_PATTERN = "**/SKILL.md"
 const CUSTOMIZE_DEVCODE_SKILL_NAME = "customize-devcode"
 const CUSTOMIZE_DEVCODE_SKILL_DESCRIPTION =
   "Use ONLY when the user is editing or creating devcode's own configuration: devcode.json, devcode.jsonc, files under .devcode/, or files under ~/.config/devcode/. Also use when creating or fixing devcode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring devcode itself."
-const CUSTOMIZE_DEVCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
+const CUSTOMIZE_DEVCODE_SKILL_BODY = SkillPlugin.CustomizeDevcodeContent
 
 export const Info = Schema.Struct({
   name: Schema.String,
