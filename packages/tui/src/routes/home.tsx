@@ -13,6 +13,7 @@ import { useEditorContext } from "../context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../config"
 import { useKV } from "../context/kv"
+import { isFlagEnabled } from "@devcode/core/experimental-flags"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
 
 let once = false
@@ -38,12 +39,11 @@ export function Home() {
   let betaInitDone = false
   createEffect(() => {
     if (betaInitDone) return
-    if (!kv.ready) return
     betaInitDone = true
-    setBetaUiActive(kv.get("beta_ui", false))
+    setBetaUiActive(isFlagEnabled("beta_ui"))
   })
   createEffect(() => {
-    if (!kv.get("beta_ui", false)) setBetaUiActive(false)
+    if (!isFlagEnabled("beta_ui")) setBetaUiActive(false)
   })
   const promptMaxWidth = createMemo(() => {
     const configured = tuiConfig.prompt?.max_width

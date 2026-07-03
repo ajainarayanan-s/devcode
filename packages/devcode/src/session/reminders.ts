@@ -3,6 +3,7 @@ import { SessionV1 } from "@devcode/core/v1/session"
 import { Effect } from "effect"
 import { Agent } from "@/agent/agent"
 import { FSUtil } from "@devcode/core/fs-util"
+import { isFlagEnabled } from "@devcode/core/experimental-flags"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { PartID } from "./schema"
@@ -18,12 +19,13 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   session: Session.Info
 }) {
   const flags = yield* RuntimeFlags.Service
+  const planModeEnabled = flags.experimentalPlanMode || isFlagEnabled("planMode")
   const fsys = yield* FSUtil.Service
   const sessions = yield* Session.Service
   const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
   if (!userMessage) return input.messages
 
-  if (!flags.experimentalPlanMode) {
+  if (!planModeEnabled) {
     if (input.agent.name === "plan") {
       userMessage.parts.push({
         id: PartID.ascending(),

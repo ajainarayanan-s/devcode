@@ -201,6 +201,10 @@ export function Session() {
     setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
   })
   onCleanup(() => setEpilogue())
+  onCleanup(() => {
+    if (scrollPollInterval) clearInterval(scrollPollInterval)
+    if (scrollHideTimeout) clearTimeout(scrollHideTimeout)
+  })
   const children = createMemo(() => {
     const parentID = session()?.parentID ?? session()?.id
     return sync.data.session
@@ -333,6 +337,9 @@ export function Session() {
   let seeded = false
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef | undefined
+  let scrollHideTimeout: ReturnType<typeof setTimeout> | undefined
+  let scrollPollInterval: ReturnType<typeof setInterval> | undefined
+  const [isAtBottom, setIsAtBottom] = createSignal(true)
   const bind = (r: PromptRef | undefined) => {
     prompt = r
     promptRef.set(r)
@@ -1163,7 +1170,22 @@ export function Session() {
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
             <Show when={session()}>
               <scrollbox
-                ref={(r) => (scroll = r)}
+                ref={(r) => {
+                  scroll = r
+                  if (r && !scrollPollInterval) {
+                    let lastScrollTop = -1
+                    scrollPollInterval = setInterval(() => {
+                      if (!scroll || scroll.isDestroyed) return
+                      if (scroll.scrollTop === lastScrollTop) return
+                      lastScrollTop = scroll.scrollTop
+                      const atBottom = Math.abs(scroll.scrollTop - (scroll.scrollHeight - scroll.height)) < 2
+                      setIsAtBottom(() => atBottom)
+                      setShowScrollbar(() => true)
+                      if (scrollHideTimeout) clearTimeout(scrollHideTimeout)
+                      scrollHideTimeout = setTimeout(() => setShowScrollbar(() => false), 3000)
+                    }, 100)
+                  }
+                }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
                 }}
@@ -1311,6 +1333,8 @@ export function Session() {
                       }}
                       sessionID={route.sessionID}
                       right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                      isAtBottom={isAtBottom()}
+                      onJumpToBottom={toBottom}
                     />
                   </pluginRuntime.Slot>
                 </Show>
@@ -1484,11 +1508,21 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
 
+  // Text parts with recap line removed (to avoid duplicate display)
+  const textPartsWithoutRecap = createMemo(() => {
+    return props.parts.map((part) => {
+      if (part.type !== "text") return part
+      const lines = part.text.split("\n")
+      const filtered = lines.filter((line) => !line.trim().startsWith("※ recap:"))
+      return { ...part, text: filtered.join("\n") }
+    })
+  })
+
   const groupedParts = createMemo(() => {
     const result: (Part | { type: "tool_group"; parts: ToolPart[] })[] = []
     let currentToolGroup: ToolPart[] = []
 
-    for (const part of props.parts) {
+    for (const part of textPartsWithoutRecap()) {
       if (part.type === "tool") {
         currentToolGroup.push(part)
       } else {
@@ -1511,6 +1545,70 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       }
     }
     return result
+  })
+
+  // Background agent status: count running background tasks
+  const runningBackgroundCount = createMemo(() => {
+    return props.parts.filter(
+      (p) =>
+        p.type === "tool" &&
+        p.tool === "task" &&
+        "status" in p.state &&
+        p.state.status === "running" &&
+        "metadata" in p.state &&
+        p.state.metadata?.background === true,
+    ).length
+  })
+
+  // Whether all background tasks have completed (had background tasks, none running)
+  const hadBackgroundTasks = createMemo(() =>
+    props.parts.some(
+      (p) =>
+        p.type === "tool" &&
+        p.tool === "task" &&
+        "metadata" in p.state &&
+        p.state.metadata?.background === true,
+    ),
+  )
+  const allBackgroundDone = createMemo(() => hadBackgroundTasks() && runningBackgroundCount() === 0)
+
+  // Elapsed time since first background task started
+  const churnedTime = createMemo(() => {
+    if (!allBackgroundDone()) return ""
+    const bgParts = props.parts.filter(
+      (p): p is ToolPart & { state: { startedAt?: number; completedAt?: number } } =>
+        p.type === "tool" &&
+        p.tool === "task" &&
+        "metadata" in p.state &&
+        p.state.metadata?.background === true,
+    )
+    if (bgParts.length === 0) return ""
+    const startTimes = bgParts.map((p) => p.state.startedAt ?? 0).filter((t) => t > 0)
+    const endTimes = bgParts.map((p) => p.state.completedAt ?? 0).filter((t) => t > 0)
+    if (startTimes.length === 0 || endTimes.length === 0) return ""
+    const elapsed = Math.max(...endTimes) - Math.min(...startTimes)
+    if (elapsed < 1000) return "< 1s"
+    const secs = Math.floor(elapsed / 1000)
+    const mins = Math.floor(secs / 60)
+    const remainSecs = secs % 60
+    if (mins === 0) return `${remainSecs}s`
+    return `${mins}m ${remainSecs}s`
+  })
+
+  // Extract recap text from assistant's text parts
+  const recapText = createMemo(() => {
+    for (const part of props.parts) {
+      if (part.type === "text") {
+        const lines = part.text.split("\n")
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (trimmed.startsWith("※ recap:")) {
+            return trimmed.slice("※ recap:".length).trim()
+          }
+        }
+      }
+    }
+    return ""
   })
 
   return (
@@ -1569,7 +1667,29 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           customBorderChars={SplitBorder.customBorderChars}
           borderColor={theme.error}
         >
-          <text fg={theme.textMuted}>{props.message.error?.data.message}</text>
+          <text fg={theme.textMuted} wrapMode="word">{props.message.error?.data.message}</text>
+        </box>
+      </Show>
+      {/* Background agent status: single transitioning line */}
+      <Show when={runningBackgroundCount() > 0}>
+        <box paddingLeft={3} paddingTop={1}>
+          <text fg={theme.textMuted}>
+            ✻ Waiting for {runningBackgroundCount()} background agent{runningBackgroundCount() > 1 ? "s" : ""} to
+            finish...
+          </text>
+        </box>
+      </Show>
+      <Show when={allBackgroundDone() && churnedTime()}>
+        <box paddingLeft={3} paddingTop={1}>
+          <text fg={theme.textMuted}>✻ Churned for {churnedTime()}</text>
+        </box>
+      </Show>
+      {/* Recap summary */}
+      <Show when={recapText()}>
+        <box paddingLeft={3} paddingTop={1}>
+          <text fg={theme.textMuted} wrapMode="word" attributes={TextAttributes.ITALIC}>
+            ※ recap: {recapText()}
+          </text>
         </box>
       </Show>
       <Switch>
@@ -2015,7 +2135,7 @@ export function InlineToolRow(props: {
       </Switch>
       <Show when={props.failed && props.errorExpanded}>
         <box paddingLeft={INLINE_TOOL_ICON_WIDTH}>
-          <text fg={props.errorColor}>{props.error}</text>
+          <text fg={props.errorColor} wrapMode="word">{props.error}</text>
         </box>
       </Show>
     </box>
@@ -2064,7 +2184,7 @@ function BlockTool(props: {
       </Show>
       {props.children}
       <Show when={error()}>
-        <text fg={theme.error}>{error()}</text>
+        <text fg={theme.error} wrapMode="word">{error()}</text>
       </Show>
     </box>
   )
@@ -2682,8 +2802,8 @@ function Question(props: ToolProps) {
             <For each={questions()}>
               {(q, i) => (
                 <box flexDirection="column">
-                  <text fg={theme.textMuted}>{q.question}</text>
-                  <text fg={theme.text}>{format(answers()?.[i()])}</text>
+                  <text fg={theme.textMuted} wrapMode="word">{q.question}</text>
+                  <text fg={theme.text} wrapMode="word">{format(answers()?.[i()])}</text>
                 </box>
               )}
             </For>

@@ -71,6 +71,8 @@ export const layer = (overrides: Partial<Info> = {}) =>
     }),
   ).pipe(Layer.provide(emptyConfigLayer))
 
+// --- Layers ---
+
 export const defaultLayer = Service.defaultLayer.pipe(Layer.orDie)
 
 export const node = LayerNode.make(defaultLayer, [])

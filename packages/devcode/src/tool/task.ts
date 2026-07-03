@@ -13,6 +13,10 @@ import { Config } from "@/config/config"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { isFlagEnabled } from "@devcode/core/experimental-flags"
+import { Global } from "@devcode/core/global"
+import fs from "fs"
+import path from "path"
 import { Database } from "@devcode/core/database/database"
 
 export interface TaskPromptOps {
@@ -95,7 +99,8 @@ export const TaskTool = Tool.define(
     ) {
       const cfg = yield* config.get()
       const runInBackground = params.background === true
-      if (runInBackground && !flags.experimentalBackgroundSubagents) {
+      const bgEnabled = flags.experimentalBackgroundSubagents || isFlagEnabled("backgroundSubagents")
+      if (runInBackground && !bgEnabled) {
         return yield* Effect.fail(
           new Error("Background subagents require DEVCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
         )
@@ -333,12 +338,13 @@ export const TaskTool = Tool.define(
       )
     })
 
+    const bgEnabledForDesc = flags.experimentalBackgroundSubagents || isFlagEnabled("backgroundSubagents")
     return {
-      description: flags.experimentalBackgroundSubagents
+      description: bgEnabledForDesc
         ? [DESCRIPTION, BACKGROUND_DESCRIPTION].join("\n\n")
         : DESCRIPTION,
       parameters: Parameters,
-      jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
+      jsonSchema: bgEnabledForDesc ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         run(params, ctx).pipe(Effect.orDie),
     }

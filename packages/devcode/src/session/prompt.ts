@@ -47,6 +47,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { isFlagEnabled } from "@devcode/core/experimental-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@devcode/core/database/database"
 import { SessionEvent } from "@devcode/core/session/event"
@@ -123,6 +124,7 @@ export const layer = Layer.effect(
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const eventSystemEnabled = flags.experimentalEventSystem || isFlagEnabled("eventSystem")
     const database = yield* Database.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
@@ -500,7 +502,7 @@ export const layer = Layer.effect(
               },
             }
             yield* sessions.updatePart(part)
-            if (flags.experimentalEventSystem) {
+            if (eventSystemEnabled) {
               yield* events.publish(SessionEvent.Shell.Started, {
                 sessionID: input.sessionID,
                 messageID: SessionMessage.ID.create(),
@@ -524,7 +526,7 @@ export const layer = Layer.effect(
                 output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
               }
               const completed = Date.now()
-              if (flags.experimentalEventSystem) {
+              if (eventSystemEnabled) {
                 yield* events.publish(SessionEvent.Shell.Ended, {
                   sessionID: input.sessionID,
                   timestamp: DateTime.makeUnsafe(completed),
@@ -1074,7 +1076,7 @@ export const layer = Layer.effect(
         },
       )
       // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-      if (flags.experimentalEventSystem) {
+      if (eventSystemEnabled) {
         yield* events.publish(SessionEvent.Prompted, {
           sessionID: input.sessionID,
           messageID: SessionMessage.ID.create(),
@@ -1089,7 +1091,7 @@ export const layer = Layer.effect(
       }
       for (const text of nextPrompt.synthetic) {
         // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        if (flags.experimentalEventSystem) {
+        if (eventSystemEnabled) {
           yield* events.publish(SessionEvent.Synthetic, {
             sessionID: input.sessionID,
             messageID: SessionMessage.ID.create(),

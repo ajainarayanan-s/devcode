@@ -46,7 +46,7 @@ import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
-import { DialogAdvanced } from "./component/dialog-advanced"
+import { DialogExperimental } from "./component/dialog-experimental"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
@@ -922,12 +922,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
-        name: "advanced.show",
-        title: "Advanced features",
+        name: "experimental.toggle",
+        title: "Toggle experimental features",
         category: "System",
-        slashName: "advanced",
+        slashName: "experimental",
         run: () => {
-          dialog.replace(() => <DialogAdvanced />)
+          dialog.replace(() => <DialogExperimental />)
         },
       },
     ].map((command) => ({

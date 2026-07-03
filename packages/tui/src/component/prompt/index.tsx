@@ -15,6 +15,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
 import { Flag, truthy } from "@devcode/core/flag/flag"
+import { isUmbrellaEnabled, isFlagEnabled } from "@devcode/core/experimental-flags"
 import { tint, useTheme } from "../../context/theme"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -70,6 +71,8 @@ export type PromptProps = {
     normal?: string[]
     shell?: string[]
   }
+  isAtBottom?: boolean
+  onJumpToBottom?: () => void
 }
 
 function pastedFilepath(value: string, platform: string) {
@@ -167,7 +170,9 @@ export function Prompt(props: PromptProps) {
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
   const kv = useKV()
-  const bgSubagentsEnabled = () => truthy("DEVCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS")
+  const experimentalEnabled = () => {
+    return isUmbrellaEnabled() || truthy("DEVCODE_EXPERIMENTAL")
+  }
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
@@ -1460,10 +1465,10 @@ export function Prompt(props: PromptProps) {
                               </span>
                             </text>
                           </Show>
-                          <Show when={bgSubagentsEnabled()}>
+                          <Show when={experimentalEnabled()}>
                             <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
                             <text fg={fadeColor(theme.accent, modelMetaAlpha())}>
-                              ⚡ BG
+                              ⚡
                             </text>
                           </Show>
                         </box>
@@ -1666,6 +1671,15 @@ export function Prompt(props: PromptProps) {
                   <text fg={theme.text}>
                     {paletteShortcut()} <span style={{ fg: theme.textMuted }}>commands</span>
                   </text>
+                  <Show when={!props.isAtBottom && props.onJumpToBottom}>
+                    <text
+                      fg={theme.accent}
+                      onMouseOver={() => {}}
+                      onMouseUp={() => props.onJumpToBottom?.()}
+                    >
+                      ↓ bottom
+                    </text>
+                  </Show>
                 </Match>
                 <Match when={store.mode === "shell"}>
                   <text fg={theme.text}>

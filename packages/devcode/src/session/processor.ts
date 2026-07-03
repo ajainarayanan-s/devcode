@@ -30,6 +30,7 @@ import { ModelV2 } from "@devcode/core/model"
 import { ProviderV2 } from "@devcode/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { isFlagEnabled } from "@devcode/core/experimental-flags"
 import { ToolOutput, Usage, type LLMEvent } from "@devcode/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
@@ -105,6 +106,7 @@ export const layer = Layer.effect(
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const eventSystemEnabled = flags.experimentalEventSystem || isFlagEnabled("eventSystem")
     const database = yield* Database.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
@@ -126,7 +128,7 @@ export const layer = Layer.effect(
         reasoningMap: {},
         v2AssistantMessageID: undefined,
       }
-      const mirrorAssistant = flags.experimentalEventSystem && !input.assistantMessage.summary
+      const mirrorAssistant = eventSystemEnabled && !input.assistantMessage.summary
       let aborted = false
 
       const parse = (e: unknown) =>

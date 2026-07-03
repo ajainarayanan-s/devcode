@@ -18,6 +18,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { isOverflow as overflow, usable } from "./overflow"
 import { serviceUse } from "@devcode/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { isFlagEnabled } from "@devcode/core/experimental-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionEvent } from "@devcode/core/session/event"
 import { SessionMessage } from "@devcode/core/session/message"
@@ -174,6 +175,7 @@ export const layer = Layer.effect(
     const provider = yield* Provider.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const eventSystemEnabled = flags.experimentalEventSystem || isFlagEnabled("eventSystem")
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: SessionV1.Assistant["tokens"]
@@ -535,7 +537,7 @@ export const layer = Layer.effect(
             parts: [],
           },
         )
-        if (flags.experimentalEventSystem) {
+        if (eventSystemEnabled) {
           if (summary)
             yield* events.publish(SessionEvent.Compaction.Ended, {
               sessionID: input.sessionID,
@@ -574,7 +576,7 @@ export const layer = Layer.effect(
         auto: input.auto,
         overflow: input.overflow,
       })
-      if (flags.experimentalEventSystem) {
+      if (eventSystemEnabled) {
         yield* events.publish(SessionEvent.Compaction.Started, {
           sessionID: input.sessionID,
           messageID: SessionMessage.ID.make(msg.id),

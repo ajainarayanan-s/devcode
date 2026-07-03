@@ -50,6 +50,7 @@ import { Skill } from "../skill"
 import { Permission } from "@/permission"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { isFlagEnabled } from "@devcode/core/experimental-flags"
 import { ProviderV2 } from "@devcode/core/provider"
 import { ModelV2 } from "@devcode/core/model"
 
@@ -194,6 +195,8 @@ export const layer = Layer.effect(
 
         yield* config.get()
         const questionEnabled = ["app", "cli", "desktop"].includes(flags.client) || flags.enableQuestionTool
+        const lspToolEnabled = isFlagEnabled("lspTool") || flags.experimentalLspTool
+        const planModeEnabled = isFlagEnabled("planMode") || flags.experimentalPlanMode
 
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
@@ -231,8 +234,8 @@ export const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.patch,
-            ...(flags.experimentalLspTool ? [tool.lsp] : []),
-            ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            ...(lspToolEnabled ? [tool.lsp] : []),
+            ...(planModeEnabled && flags.client === "cli" ? [tool.plan] : []),
           ],
           task: tool.task,
           read: tool.read,

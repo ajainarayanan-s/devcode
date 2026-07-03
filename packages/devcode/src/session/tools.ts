@@ -124,30 +124,25 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     if (!transformed.properties) transformed.properties = {}
     transformed.properties.toolSummary = {
       type: "string",
-      description: `Generate a natural progress summary that describes the assistant's current objective.
-
-The summary should read like Claude Code or Cursor, as if the assistant is thinking out loud.
+      description: `Generate a short progress summary for this tool call.
 
 Requirements:
+- 5–8 words maximum. No exceptions.
 - Describe the intent, not the tool.
-- Use natural language.
-- Prefer present tense.
-- Sound proactive and conversational.
-- Keep it concise (5–14 words).
-- Avoid filenames unless they're important.
-- Avoid generic phrases like "Using tool", "Calling function", "Reading file", or "Editing file".
+- Use present tense.
+- No filenames unless critical.
+- No "I'll", "Let me", "Going to", or "About to" prefixes.
+- No trailing punctuation.
 
 Good examples:
-- Let me explore the project's core files.
-- Let me understand how this feature works.
-- Deploying multiple agents to tackle this in parallel.
-- Investigating the collision system.
-- Reviewing the rendering pipeline.
-- Searching for the source of the issue.
-- Gathering context before making changes.
-- Validating the latest implementation.
-- Coordinating parallel fixes across the project.
-- Applying the final refinements.`,
+- Exploring project structure
+- Understanding the auth flow
+- Investigating the collision bug
+- Reviewing the rendering pipeline
+- Searching for the root cause
+- Gathering context before changes
+- Validating the implementation
+- Coordinating parallel fixes`,
     }
     transformed.properties.toolAction = {
       type: "string",
